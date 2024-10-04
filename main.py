@@ -266,7 +266,7 @@ def main_google(EMAIL, PASSWORD):
                                          '(FROM "BestBuyInfo@emailinfo.bestbuy.com") (OR (SUBJECT "Your Best Buy order has been canceled.") (SUBJECT "Your order has been canceled."))')
     print(f"Found {len(cancelled_emails)} cancellation emails")
     for num in cancelled_emails:
-        _, cancelled_order_number, _, _, _ = process_email(mail, num, 'cancelled')
+        _, cancelled_order_number, _, _, _, _ = process_email(mail, num, 'cancelled')
         if cancelled_order_number:
             for order in orders:
                 if order['number'] == cancelled_order_number:
