@@ -178,7 +178,7 @@ def main_proton(EMAIL, PASSWORD):
                 for order in orders:
                     if order['number'] == shipped_order_number:
                         order['status'] = "Shipped"
-                        order['tracking'].extend(tracking_numbers)  # Use extend instead of assign
+                        order['tracking'].extend(tracking_numbers)
                         shipped_count += 1
                         tracking_numbers_count += len(tracking_numbers)
                         print(
@@ -287,6 +287,8 @@ def main_google(EMAIL, PASSWORD):
                 if order['number'] == shipped_order_number:
                     order['status'] = "Shipped"
                     order['tracking'] = tracking_numbers
+                    shipped_count += 1
+                    tracking_numbers_count += len(tracking_numbers)
                     print(
                         f"Processed shipped: Order {shipped_order_number} with {len(tracking_numbers)} tracking number(s)")
                     break
