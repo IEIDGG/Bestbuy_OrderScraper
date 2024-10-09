@@ -64,7 +64,6 @@ def process_email(mail, num, email_type):
     email_message = email.message_from_bytes(email_body)
 
     email_address = email_message['To']
-
     date_tuple = email.utils.parsedate_tz(email_message['Date'])
     email_date = datetime.fromtimestamp(email.utils.mktime_tz(date_tuple)).strftime(
         "%Y-%m-%d") if date_tuple else "Unknown"
@@ -89,6 +88,14 @@ def process_email(mail, num, email_type):
                 if order_span:
                     order_number = order_span.text.strip().replace("Order #", "")
 
+                order_tds = soup.find_all('td', style='padding-bottom:12px;')
+                for td in order_tds:
+                    if 'Order number:' in td.text:
+                        order_span = td.find('span', style=lambda
+                            value: value and 'font-weight: 700' in value and 'font-size: 14px' in value)
+                        if order_span:
+                            order_number = order_span.text.strip()
+
                 if email_type == 'shipped':
                     tracking_spans = soup.find_all('span', style='font: bold 14px Arial')
                     for span in tracking_spans:
@@ -96,6 +103,14 @@ def process_email(mail, num, email_type):
                             tracking_link = span.find('a')
                             if tracking_link:
                                 tracking_numbers.append(tracking_link.text.strip())
+
+                    tracking_tds = soup.find_all('td', style='padding-bottom:12px;')
+                    for td in tracking_tds:
+                        if 'Tracking Number:' in td.text:
+                            tracking_span = td.find('span', style=lambda
+                                value: value and 'font-weight: 700' in value and 'font-size: 14px' in value)
+                            if tracking_span:
+                                tracking_numbers.append(tracking_span.text.strip())
 
     return email_date, order_number, tracking_numbers, products, total_price, email_address
 
@@ -130,7 +145,6 @@ def main_proton(EMAIL, PASSWORD):
     shipped_count = 0
     tracking_numbers_count = 0
 
-    # Process confirmation emails
     if folder_dict['confirmation']:
         print(f"\nProcessing confirmation emails in folder: {folder_dict['confirmation']}")
         confirmation_emails = get_email_content(mail, folder_dict['confirmation'],
@@ -151,7 +165,6 @@ def main_proton(EMAIL, PASSWORD):
                 confirmation_count += 1
                 print(f"Processed confirmation: Order {order_number} from {email_date} with {len(products)} products")
 
-    # Process cancelled emails
     if folder_dict['cancelled']:
         print(f"\nProcessing cancellation emails in folder: {folder_dict['cancelled']}")
         cancelled_emails = get_email_content(mail, folder_dict['cancelled'],
@@ -167,7 +180,6 @@ def main_proton(EMAIL, PASSWORD):
                         print(f"Processed cancellation: Order {cancelled_order_number}")
                         break
 
-    # Process shipped emails
     if folder_dict['shipped']:
         print(f"\nProcessing shipped emails in folder: {folder_dict['shipped']}")
         shipped_emails = get_email_content(mail, folder_dict['shipped'], 'FROM "BestBuyInfo@emailinfo.bestbuy.com"')
@@ -188,18 +200,23 @@ def main_proton(EMAIL, PASSWORD):
     mail.logout()
     print("\nClosing mail connection")
 
+    unique_orders = {}
+
+    for order in orders:
+        order_key = (order['number'], tuple(sorted((p['title'], p['price'], p['quantity']) for p in order['products'])))
+        if order_key not in unique_orders:
+            unique_orders[order_key] = order
+    unique_orders_list = list(unique_orders.values())
+
     with open('bestbuy_orders.csv', 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-
-        # Write the header
-        max_tracking = max(len(order['tracking']) for order in orders) if orders else 0
+        max_tracking = max(len(order['tracking']) for order in unique_orders_list) if unique_orders_list else 0
         header = ['Product', 'Price', 'Quantity', 'Total Price', 'Order Date', 'Order Number', 'Status']
         header.extend([f'Tracking Number {i + 1}' for i in range(max_tracking)])
         header.append('Email Address')
         writer.writerow(header)
 
-        # Write the data
-        for order in orders:
+        for order in unique_orders_list:
             if order['products']:
                 for product in order['products']:
                     row = [
@@ -221,6 +238,7 @@ def main_proton(EMAIL, PASSWORD):
                 writer.writerow(row)
 
     print(f"\nOrder information has been saved to 'bestbuy_orders.csv'")
+    print(f"Total unique orders found: {len(unique_orders_list)}")
     print(f"Total orders found: {len(orders)}")
     print(f"Confirmation emails processed: {confirmation_count}")
     print(f"Cancellation emails processed: {cancellation_count}")
@@ -240,7 +258,6 @@ def main_google(EMAIL, PASSWORD):
     shipped_count = 0
     tracking_numbers_count = 0
 
-    # Process confirmation emails
     print("\nProcessing confirmation emails")
     confirmation_emails = get_email_content(mail, "INBOX",
                                             '(FROM "BestBuyInfo@emailinfo.bestbuy.com") (SUBJECT "Thanks for your order")')
@@ -260,7 +277,6 @@ def main_google(EMAIL, PASSWORD):
             confirmation_count += 1
             print(f"Processed confirmation: Order {order_number} from {email_date} with {len(products)} products")
 
-    # Process cancelled emails
     print("\nProcessing cancellation emails")
     cancelled_emails = get_email_content(mail, "INBOX",
                                          '(FROM "BestBuyInfo@emailinfo.bestbuy.com") (OR (SUBJECT "Your Best Buy order has been canceled.") (SUBJECT "Your order has been canceled."))')
@@ -275,10 +291,10 @@ def main_google(EMAIL, PASSWORD):
                     print(f"Processed cancellation: Order {cancelled_order_number}")
                     break
 
-    # Process shipped emails
     print("\nProcessing shipped emails")
     shipped_emails = get_email_content(mail, "INBOX",
-                                       '(FROM "BestBuyInfo@emailinfo.bestbuy.com") (SUBJECT "Your order will be shipped soon!")')
+                                       '(FROM "BestBuyInfo@emailinfo.bestbuy.com") (OR (SUBJECT "Your order will be shipped soon!")'
+                                       ' (SUBJECT "We have your tracking number."))')
     print(f"Found {len(shipped_emails)} shipped emails")
     for num in shipped_emails:
         _, shipped_order_number, tracking_numbers, _, _, _ = process_email(mail, num, 'shipped')
@@ -296,18 +312,23 @@ def main_google(EMAIL, PASSWORD):
     mail.logout()
     print("\nClosing mail connection")
 
+    unique_orders = {}
+
+    for order in orders:
+        order_key = (order['number'], tuple(sorted((p['title'], p['price'], p['quantity']) for p in order['products'])))
+        if order_key not in unique_orders:
+            unique_orders[order_key] = order
+    unique_orders_list = list(unique_orders.values())
+
     with open('bestbuy_orders.csv', 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-
-        # Write the header
-        max_tracking = max(len(order['tracking']) for order in orders) if orders else 0
+        max_tracking = max(len(order['tracking']) for order in unique_orders_list) if unique_orders_list else 0
         header = ['Product', 'Price', 'Quantity', 'Total Price', 'Order Date', 'Order Number', 'Status']
         header.extend([f'Tracking Number {i + 1}' for i in range(max_tracking)])
         header.append('Email Address')
         writer.writerow(header)
 
-        # Write the data
-        for order in orders:
+        for order in unique_orders_list:
             if order['products']:
                 for product in order['products']:
                     row = [
@@ -329,6 +350,7 @@ def main_google(EMAIL, PASSWORD):
                 writer.writerow(row)
 
     print(f"\nOrder information has been saved to 'bestbuy_orders.csv'")
+    print(f"Total unique orders found: {len(unique_orders_list)}")
     print(f"Total orders found: {len(orders)}")
     print(f"Confirmation emails processed: {confirmation_count}")
     print(f"Cancellation emails processed: {cancellation_count}")
