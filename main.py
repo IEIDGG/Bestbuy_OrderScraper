@@ -115,7 +115,7 @@ def process_email(mail, num, email_type):
     return email_date, order_number, tracking_numbers, products, total_price, email_address
 
 
-def main_proton(EMAIL, PASSWORD):
+def proton_scraper(EMAIL, PASSWORD):
     mail = connect_to_mail(EMAIL, PASSWORD, "127.0.0.1", 1143, use_ssl=False)
 
     print("Connecting to mail server...")
@@ -247,7 +247,7 @@ def main_proton(EMAIL, PASSWORD):
     print(f"Total tracking numbers found: {tracking_numbers_count}")
 
 
-def main_google(EMAIL, PASSWORD):
+def email_scraper(EMAIL, PASSWORD):
     mail = connect_to_mail(EMAIL, PASSWORD, "imap.gmail.com", 993, use_ssl=True)
 
     print("Connecting to Gmail server...")
@@ -261,6 +261,9 @@ def main_google(EMAIL, PASSWORD):
     print("\nProcessing confirmation emails")
     confirmation_emails = get_email_content(mail, "INBOX",
                                             '(FROM "BestBuyInfo@emailinfo.bestbuy.com") (SUBJECT "Thanks for your order")')
+    if confirmation_emails is None:
+        print("Script was not able to locate any orders from the aforementioned search criteria.")
+        return -1
     print(f"Found {len(confirmation_emails)} confirmation emails")
     for num in confirmation_emails:
         email_date, order_number, _, products, total_price, email_address = process_email(mail, num, 'confirmation')
@@ -370,6 +373,8 @@ def read_credentials(file_path):
 
 if __name__ == "__main__":
     user, password, is_proton = read_credentials('credentials.txt')
-    main_function = main_proton if is_proton else main_google
-    main_function(user, password)
+    if is_proton:
+        proton_scraper(user, password)
+    else:
+        email_scraper(user, password)
     input("ENTER to exit")
