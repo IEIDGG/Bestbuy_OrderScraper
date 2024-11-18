@@ -14,7 +14,6 @@ def process_email(mail, num, email_type, protocol='RFC822'):
         email_body = msg_data[0][1]
         email_message = email.message_from_bytes(email_body)
 
-        # Rest of the function remains the same
         email_address = email_message['To']
         date_tuple = email.utils.parsedate_tz(email_message['Date'])
         email_date = datetime.fromtimestamp(email.utils.mktime_tz(date_tuple)).strftime(
